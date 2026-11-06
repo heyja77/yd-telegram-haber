@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           1.8.1
+ * Version:           1.8.2
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '1.8.1' );
+define( 'YDTG_VERSION', '1.8.2' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -467,6 +467,14 @@ class YDTG_Plugin {
 		echo '<h2>Güncelleme</h2><p>Kurulu sürüm: <strong>' . esc_html( YDTG_VERSION ) . '</strong>. Yeni sürümler GitHub\'dan (heyja77/yd-telegram-haber) gelir ve Eklentiler sayfasında normal güncelleme olarak görünür.</p><p>';
 		self::button( 'gh_check', 'Güncellemeleri şimdi denetle' );
 		echo '</p>';
+		$gh = YDTG_Updater::release();
+		if ( ! empty( $gh['version'] ) ) {
+			$new = version_compare( $gh['version'], YDTG_VERSION, '>' );
+			echo '<p>GitHub\'daki son sürüm: <strong>' . esc_html( $gh['version'] ) . '</strong>' . ( $new ? ' — <a href="' . esc_url( admin_url( 'plugins.php' ) ) . '">güncellemek için Eklentiler sayfasına git</a>' : ' (kurulu)' ) . '</p>';
+			if ( $gh['notes'] ) {
+				echo '<p class="description">Son değişiklik' . ( $gh['date'] ? ' (' . esc_html( wp_date( 'd.m.Y H:i', strtotime( $gh['date'] ) ) ) . ')' : '' ) . ': ' . esc_html( $gh['notes'] ) . '</p>';
+			}
+		}
 
 		// Nöbetçi eczane.
 		self::pharmacy_box();
