@@ -323,7 +323,7 @@ class YDTG_Plugin {
 				delete_site_transient( 'update_plugins' );
 				wp_update_plugins();
 				$r   = YDTG_Updater::release( true );
-				$msg = empty( $r['version'] ) ? 'err:GitHub\'da henüz yayınlanmış sürüm bulunamadı.' : ( version_compare( $r['version'], YDTG_VERSION, '>' ) ? 'ok:Yeni sürüm var: ' . $r['version'] . '. Eklentiler sayfasından güncelleyebilirsin.' : 'ok:Eklenti güncel (' . YDTG_VERSION . ').' );
+				$msg = empty( $r['version'] ) ? 'err:GitHub deposuna ulaşılamadı, biraz sonra tekrar dene.' : ( version_compare( $r['version'], YDTG_VERSION, '>' ) ? 'ok:Yeni sürüm var: ' . $r['version'] . '. Eklentiler sayfasından güncelleyebilirsin.' : 'ok:Eklenti güncel (' . YDTG_VERSION . ').' );
 				break;
 
 			case 'clearlog':

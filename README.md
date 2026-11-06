@@ -10,4 +10,4 @@ yalovadijital.com için WordPress eklentisi.
 
 ## Güncelleme
 
-Yeni sürüm için `yd-telegram-haber.php` içindeki sürüm numarası artırılır ve `v1.x.y` etiketiyle bir GitHub release oluşturulup `yd-telegram-haber.zip` dosyası eklenir. Site, Eklentiler sayfasında güncellemeyi kendisi gösterir.
+Yeni sürüm için `yd-telegram-haber.php` içindeki `Version:` numarası artırılıp ana dala (main) gönderilir. Site deponun ana dalındaki sürüm numarasını 3 saatte bir kontrol eder; numara yüksekse Eklentiler sayfasında "Şimdi güncelle" çıkar. Hemen kontrol için: Ayarlar → Telegram Haber → "Güncellemeleri şimdi denetle".

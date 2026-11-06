@@ -2,10 +2,10 @@
 /**
  * GitHub üzerinden kendini güncelleme.
  *
- * github.com/heyja77/yd-telegram-haber deposundaki en son "release" kontrol edilir.
- * Sürüm numarası sitedekinden yüksekse, Eklentiler sayfasında normal bir
- * WordPress güncellemesi gibi "Şimdi güncelle" bağlantısı çıkar.
- * Release'e eklenmiş "yd-telegram-haber.zip" dosyası indirilir.
+ * github.com/heyja77/yd-telegram-haber deposunun ana dalındaki sürüm numarası kontrol edilir.
+ * Sitedekinden yüksekse, Eklentiler sayfasında normal bir WordPress güncellemesi
+ * gibi "Şimdi güncelle" bağlantısı çıkar. Ana dalın zip arşivi indirilir;
+ * arşivdeki "yd-telegram-haber-main" klasörü otomatik olarak doğru adla kurulur.
  */
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -15,7 +15,8 @@ class YDTG_Updater {
 
 	const REPO  = 'heyja77/yd-telegram-haber';
 	const SLUG  = 'yd-telegram-haber';
-	const CACHE = 'ydtg_gh_release';
+	const CACHE  = 'ydtg_gh_release';
+	const BRANCH = 'main';
 
 	private static $file;
 
@@ -31,38 +32,42 @@ class YDTG_Updater {
 		delete_transient( self::CACHE );
 	}
 
-	/** En son release bilgisi (6 saat önbellek). */
+	/**
+	 * Depodaki en son sürüm bilgisi (3 saat önbellek).
+	 * Ana daldaki yd-telegram-haber.php dosyasının "Version:" satırı okunur;
+	 * paket, ana dalın zip arşividir.
+	 */
 	public static function release( $force = false ) {
 		$r = $force ? false : get_transient( self::CACHE );
 		if ( is_array( $r ) ) {
 			return $r;
 		}
-		$res = wp_remote_get(
-			'https://api.github.com/repos/' . self::REPO . '/releases/latest',
-			array(
-				'timeout' => 12,
-				'headers' => array( 'Accept' => 'application/vnd.github+json', 'User-Agent' => 'Yalova-Dijital-WP' ),
-			)
+		$args = array(
+			'timeout' => 12,
+			'headers' => array( 'User-Agent' => 'Yalova-Dijital-WP' ),
 		);
-		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) ) {
+		$res  = wp_remote_get( 'https://raw.githubusercontent.com/' . self::REPO . '/' . self::BRANCH . '/' . self::SLUG . '.php?nc=' . time(), $args );
+		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) || ! preg_match( '/^\s*\*\s*Version:\s*([0-9.]+)/mi', wp_remote_retrieve_body( $res ), $m ) ) {
 			set_transient( self::CACHE, array(), HOUR_IN_SECONDS );
 			return array();
 		}
-		$j   = json_decode( wp_remote_retrieve_body( $res ), true );
-		$zip = '';
-		foreach ( (array) ( $j['assets'] ?? array() ) as $a ) {
-			if ( self::SLUG . '.zip' === ( $a['name'] ?? '' ) ) {
-				$zip = $a['browser_download_url'];
-			}
+		$notes = '';
+		$date  = '';
+		$c     = wp_remote_get( 'https://api.github.com/repos/' . self::REPO . '/commits/' . self::BRANCH, array( 'timeout' => 12, 'headers' => array( 'User-Agent' => 'Yalova-Dijital-WP', 'Accept' => 'application/vnd.github+json' ) ) );
+		if ( ! is_wp_error( $c ) && 200 === (int) wp_remote_retrieve_response_code( $c ) ) {
+			$j     = json_decode( wp_remote_retrieve_body( $c ), true );
+			$notes = (string) ( $j['commit']['message'] ?? '' );
+			$notes = trim( preg_replace( '/\n\s*(Co-Authored-By|Claude-Session):.*$/mi', '', $notes ) );
+			$date  = (string) ( $j['commit']['committer']['date'] ?? '' );
 		}
 		$r = array(
-			'version' => ltrim( (string) ( $j['tag_name'] ?? '' ), 'vV' ),
-			'zip'     => $zip,
-			'notes'   => (string) ( $j['body'] ?? '' ),
-			'date'    => (string) ( $j['published_at'] ?? '' ),
-			'url'     => (string) ( $j['html_url'] ?? '' ),
+			'version' => $m[1],
+			'zip'     => 'https://github.com/' . self::REPO . '/archive/refs/heads/' . self::BRANCH . '.zip',
+			'notes'   => $notes,
+			'date'    => $date,
+			'url'     => 'https://github.com/' . self::REPO,
 		);
-		set_transient( self::CACHE, $r, 6 * HOUR_IN_SECONDS );
+		set_transient( self::CACHE, $r, 3 * HOUR_IN_SECONDS );
 		return $r;
 	}
 
