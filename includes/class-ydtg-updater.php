@@ -44,25 +44,30 @@ class YDTG_Updater {
 		}
 		$args = array(
 			'timeout' => 12,
-			'headers' => array( 'User-Agent' => 'Yalova-Dijital-WP' ),
+			'headers' => array( 'User-Agent' => 'Yalova-Dijital-WP', 'Accept' => 'application/vnd.github+json' ),
 		);
-		$res  = wp_remote_get( 'https://raw.githubusercontent.com/' . self::REPO . '/' . self::BRANCH . '/' . self::SLUG . '.php?nc=' . time(), $args );
-		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) || ! preg_match( '/^\s*\*\s*Version:\s*([0-9.]+)/mi', wp_remote_retrieve_body( $res ), $m ) ) {
-			set_transient( self::CACHE, array(), HOUR_IN_SECONDS );
-			return array();
-		}
+		// Son kayıt (commit): kimliği ile dosya okunur, böylece GitHub önbelleği eski sürümü göstermez.
+		$sha   = self::BRANCH;
 		$notes = '';
 		$date  = '';
-		$c     = wp_remote_get( 'https://api.github.com/repos/' . self::REPO . '/commits/' . self::BRANCH, array( 'timeout' => 12, 'headers' => array( 'User-Agent' => 'Yalova-Dijital-WP', 'Accept' => 'application/vnd.github+json' ) ) );
+		$c     = wp_remote_get( 'https://api.github.com/repos/' . self::REPO . '/commits/' . self::BRANCH, $args );
 		if ( ! is_wp_error( $c ) && 200 === (int) wp_remote_retrieve_response_code( $c ) ) {
-			$j     = json_decode( wp_remote_retrieve_body( $c ), true );
+			$j = json_decode( wp_remote_retrieve_body( $c ), true );
+			if ( ! empty( $j['sha'] ) && preg_match( '/^[0-9a-f]{40}$/', $j['sha'] ) ) {
+				$sha = $j['sha'];
+			}
 			$notes = (string) ( $j['commit']['message'] ?? '' );
 			$notes = trim( preg_replace( '/\n\s*(Co-Authored-By|Claude-Session):.*$/mi', '', $notes ) );
 			$date  = (string) ( $j['commit']['committer']['date'] ?? '' );
 		}
+		$res = wp_remote_get( 'https://raw.githubusercontent.com/' . self::REPO . '/' . $sha . '/' . self::SLUG . '.php', array( 'timeout' => 12, 'headers' => array( 'User-Agent' => 'Yalova-Dijital-WP' ) ) );
+		if ( is_wp_error( $res ) || 200 !== (int) wp_remote_retrieve_response_code( $res ) || ! preg_match( '/^\s*\*\s*Version:\s*([0-9.]+)/mi', wp_remote_retrieve_body( $res ), $m ) ) {
+			set_transient( self::CACHE, array(), HOUR_IN_SECONDS );
+			return array();
+		}
 		$r = array(
 			'version' => $m[1],
-			'zip'     => 'https://github.com/' . self::REPO . '/archive/refs/heads/' . self::BRANCH . '.zip',
+			'zip'     => 'https://github.com/' . self::REPO . '/archive/' . $sha . '.zip',
 			'notes'   => $notes,
 			'date'    => $date,
 			'url'     => 'https://github.com/' . self::REPO,
