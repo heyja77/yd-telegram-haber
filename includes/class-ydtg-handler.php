@@ -55,6 +55,9 @@ class YDTG_Handler {
 			return;
 		}
 		$text = isset( $m['text'] ) ? $m['text'] : ( isset( $m['caption'] ) ? $m['caption'] : '' );
+		// Telegram'daki kalın yazıları ** işaretine çevir (ara başlıklar ve etiketler için).
+		$ents = isset( $m['entities'] ) ? $m['entities'] : ( isset( $m['caption_entities'] ) ? $m['caption_entities'] : array() );
+		$text = YDTG_Analyzer::apply_entities( $text, $ents );
 
 		// Eşleştirme: /start KOD veya sadece KOD.
 		if ( ! $this->is_owner( $chat ) ) {
@@ -82,7 +85,10 @@ class YDTG_Handler {
 		$reply_pid = $this->post_from_reply( $m );
 
 		// Düzenleme: "Başlık: ..." / "Metin: ..." (önizlemeye yanıt veya son taslak).
-		if ( ! $has_media && preg_match( '/^\s*(ba[şs]l[ıi]k|spot|[öo]zet|metin|haber|etiketler|etiket)\s*:/iu', $text ) && ( $reply_pid || ! preg_match( '/^\s*ba[şs]l[ıi]k\s*:/iu', $text ) || ! preg_match( '/^\s*(spot|metin|haber)\s*:/imu', $text ) ) ) {
+		// Başlık + özet/metin içeren tam bir haber (yanıt değilse) yeni taslak olur.
+		$lab  = YDTG_Analyzer::split_labels( $text );
+		$full = isset( $lab['fields']['baslik'] ) && ( isset( $lab['fields']['spot'] ) || isset( $lab['fields']['metin'] ) );
+		if ( ! $has_media && $lab['first'] && ( $reply_pid || ! $full ) ) {
 			$pid = $reply_pid ? $reply_pid : $this->current_post();
 			if ( $pid && $this->edit_post_fields( $pid, $text ) ) {
 				$this->refresh_preview( $pid, $chat, true );
@@ -151,7 +157,9 @@ class YDTG_Handler {
 
 	private function help_text() {
 		return "<b>YALOVA DİJİTAL – HABER BOTU</b>\n\n"
-			. "<b>Haber göndermek:</b> Tek mesajda yaz.\n"
+			. "<b>Önerilen düzen (ChatGPT):</b>\n<code>BAŞLIK:</code> haber başlığı\n<code>ÖZET:</code> başlığın altındaki spot\n<code>HABER METNİ:</code> paragraflar ve ara başlıklar\n<code>GÖRSEL YERLEŞİMİ:</code> ör. \"Kapak: 1. fotoğraf\", \"2. fotoğraf: 2. paragraftan sonra\"\n"
+			. "Fotoğraf numaraları gönderme sırasına göredir. Eksik bölüm varsa taslak oluşturulmaz, sana yazarım.\n\n"
+			. "<b>Haber göndermek (etiketsiz):</b> Tek mesajda yaz.\n"
 			. "• <b>İlk satır</b> = başlık (büyük harfle yazarsan düzeltilir; büyük harfle devam eden satır da başlığa eklenir)\n"
 			. "• <b>İkinci paragraf</b> = spot (fotoğrafın üstündeki özet)\n"
 			. "• <b>Kalan paragraflar</b> = haber metni\n\n"
@@ -171,7 +179,27 @@ class YDTG_Handler {
 	/* ------------------------------------------------------------------ */
 
 	private function new_from_text( $chat, $text, $media_msg = null, $group = '', $force = false ) {
-		list( $title, $spot, $body ) = YDTG_Analyzer::parse_news( $text );
+		$parsed = YDTG_Analyzer::parse_message( $text );
+		$title  = $parsed['title'];
+		$spot   = $parsed['spot'];
+		$body   = $parsed['body'];
+		if ( $parsed['errors'] ) {
+			// Yeni biçimde hatalı/eksik ayrıştırma: taslak oluşturulmaz, hiçbir alan başka bölümden doldurulmaz.
+			if ( $media_msg ) {
+				$this->add_pending_media( $media_msg, $group );
+			}
+			if ( $group ) {
+				set_transient( 'ydtg_mgfail_' . $group, 1, HOUR_IN_SECONDS );
+			}
+			YDTG_Plugin::log( 'Haber ayrıştırılamadı, taslak oluşturulmadı: ' . implode( ' ', $parsed['errors'] ), 'warn' );
+			$this->tg->send(
+				$chat,
+				"❌ <b>Haber oluşturulmadı.</b>\n\n• " . esc_html( implode( "\n• ", $parsed['errors'] ) )
+				. "\n\nLütfen şu düzende tekrar gönder:\n<code>BAŞLIK:</code> …\n<code>ÖZET:</code> …\n<code>HABER METNİ:</code> …\n<code>GÖRSEL YERLEŞİMİ:</code> … (isteğe bağlı)"
+				. ( $media_msg ? "\n\nFotoğrafları sakladım; sadece düzeltilmiş metni göndermen yeterli." : '' )
+			);
+			return 0;
+		}
 		if ( '' === $title ) {
 			$this->tg->send( $chat, 'Başlık bulamadım. İlk satıra başlığı yaz.' );
 			return 0;
@@ -184,8 +212,8 @@ class YDTG_Handler {
 			return 0;
 		}
 
-		if ( '' === $body ) {
-			$body = $spot;
+		if ( '' === $body && ! $parsed['strict'] ) {
+			$body = $spot; // Eski biçim: tek paragraflık haber.
 		}
 		$fp = YDTG_Analyzer::fingerprint( $title, $spot . ' ' . $body );
 		if ( ! $force ) {
@@ -216,7 +244,7 @@ class YDTG_Handler {
 		$pid = wp_insert_post(
 			array(
 				'post_title'   => $title,
-				'post_content' => YDTG_Analyzer::body_html( $body ),
+				'post_content' => YDTG_Analyzer::body_html( $body, $parsed['strict'] ),
 				'post_excerpt' => $spot,
 				'post_status'  => 'draft',
 				'post_type'    => 'post',
@@ -241,6 +269,8 @@ class YDTG_Handler {
 		update_post_meta( $pid, '_ydtg_images', array() );
 		update_post_meta( $pid, '_ydtg_videos', array() );
 		update_post_meta( $pid, '_ydtg_source', 'telegram' );
+		update_post_meta( $pid, '_ydtg_fmt', $parsed['strict'] ? 2 : 1 );
+		update_post_meta( $pid, '_ydtg_layout', $parsed['layout'] );
 		self::set_tagline( $pid, $spot );
 		$this->update_seo( $pid, $title, $spot, $tags );
 
@@ -283,10 +313,17 @@ class YDTG_Handler {
 		}
 		for ( $i = 0; $i < 8; $i++ ) {
 			$pid = (int) get_transient( 'ydtg_mg_' . $group );
-			if ( $pid ) {
+			if ( $pid || get_transient( 'ydtg_mgfail_' . $group ) ) {
 				break;
 			}
 			sleep( 1 );
+		}
+		if ( ! $pid && get_transient( 'ydtg_mgfail_' . $group ) ) {
+			// Albümün metni hatalıydı: fotoğraf eski bir taslağa eklenmez, düzeltilmiş metni bekler.
+			$pending   = (array) get_option( 'ydtg_pending_media', array() );
+			$pending[] = array( 'att' => $att, 'group' => '', 'time' => time() );
+			update_option( 'ydtg_pending_media', $pending, false );
+			return;
 		}
 		if ( $pid ) {
 			$this->add_attachment_to_post( $pid, $att );
@@ -462,11 +499,31 @@ class YDTG_Handler {
 
 	/** İçeriği metin + galeri + video olarak yeniden kurar. */
 	private function rebuild_content( $pid ) {
-		$body = (string) get_post_meta( $pid, '_ydtg_body', true );
-		$html = YDTG_Analyzer::body_html( $body );
-		$imgs = array_values( array_filter( (array) get_post_meta( $pid, '_ydtg_images', true ) ) );
-		if ( count( $imgs ) > 1 ) {
-			$html .= "\n\n" . '[gallery ids="' . implode( ',', array_map( 'intval', $imgs ) ) . '" columns="3" size="medium" link="file"]';
+		$body   = (string) get_post_meta( $pid, '_ydtg_body', true );
+		$smart  = 2 === (int) get_post_meta( $pid, '_ydtg_fmt', true );
+		$layout = get_post_meta( $pid, '_ydtg_layout', true );
+		$imgs   = array_values( array_filter( (array) get_post_meta( $pid, '_ydtg_images', true ) ) );
+		if ( is_array( $layout ) && $layout && $imgs ) {
+			// GÖRSEL YERLEŞİMİ'ne göre: kapak öne çıkan görsel, diğerleri belirtilen paragrafların arasına.
+			list( $cover, $pos ) = YDTG_Analyzer::plan_images( $imgs, $layout );
+			if ( $cover && (int) get_post_thumbnail_id( $pid ) !== (int) $cover ) {
+				set_post_thumbnail( $pid, $cover );
+			}
+			$inserts = array();
+			foreach ( $pos as $k => $ids ) {
+				if ( 'end' === $k && count( $ids ) > 1 ) {
+					$inserts[ $k ] = '[gallery ids="' . implode( ',', array_map( 'intval', $ids ) ) . '" columns="3" size="medium" link="file"]';
+					continue;
+				}
+				$inserts[ $k ] = implode( "\n", array_map( array( __CLASS__, 'figure' ), $ids ) );
+			}
+			$html = YDTG_Analyzer::body_html( $body, $smart, $inserts );
+		} else {
+			// Yerleşim bilgisi yoksa eski davranış: ilk fotoğraf kapak, birden fazlaysa sonda galeri.
+			$html = YDTG_Analyzer::body_html( $body, $smart );
+			if ( count( $imgs ) > 1 ) {
+				$html .= "\n\n" . '[gallery ids="' . implode( ',', array_map( 'intval', $imgs ) ) . '" columns="3" size="medium" link="file"]';
+			}
 		}
 		foreach ( array_filter( (array) get_post_meta( $pid, '_ydtg_videos', true ) ) as $v ) {
 			$url = wp_get_attachment_url( $v );
@@ -475,6 +532,12 @@ class YDTG_Handler {
 			}
 		}
 		wp_update_post( array( 'ID' => $pid, 'post_content' => $html ) );
+	}
+
+	/** Haber içi tek fotoğraf (WordPress'in kendi boyutlarıyla; WebP sürümleri korunur). */
+	public static function figure( $att ) {
+		$img = wp_get_attachment_image( (int) $att, 'large' );
+		return $img ? '<figure class="wp-block-image size-large">' . $img . '</figure>' : '';
 	}
 
 	/* ------------------------------------------------------------------ */
@@ -501,7 +564,10 @@ class YDTG_Handler {
 			self::set_tagline( $pid, $spot );
 		}
 		if ( isset( $f['metin'] ) && '' !== $f['metin'] ) {
-			$body = $f['metin'];
+			$body = 2 === (int) get_post_meta( $pid, '_ydtg_fmt', true ) ? YDTG_Analyzer::clean_body( $f['metin'] ) : $f['metin'];
+		}
+		if ( isset( $f['gorsel'] ) ) {
+			update_post_meta( $pid, '_ydtg_layout', YDTG_Analyzer::parse_layout( $f['gorsel'] ) );
 		}
 		$data = array(
 			'ID'           => $pid,
@@ -635,6 +701,15 @@ class YDTG_Handler {
 		$t .= '<b>Meta açıklama:</b> ' . esc_html( (string) get_post_meta( $pid, '_yoast_wpseo_metadesc', true ) ) . "\n";
 		$t .= '<b>URL:</b> /' . esc_html( $p->post_name ? $p->post_name : YDTG_Analyzer::slug( $p->post_title ) ) . "/\n";
 		$t .= '<b>Görsel:</b> ' . ( $imgs ? $imgs . ' fotoğraf' . ( $imgs > 1 ? ' (galeri)' : '' ) : '⚠️ yok' ) . ( $vids ? ', ' . $vids . ' video' : '' ) . "\n";
+		$layout = get_post_meta( $pid, '_ydtg_layout', true );
+		if ( is_array( $layout ) && $layout ) {
+			$parts = array( 'kapak: ' . ( ! empty( $layout['cover'] ) ? (int) $layout['cover'] : 1 ) . '. fotoğraf' );
+			foreach ( (array) $layout['items'] as $it ) {
+				$where   = null === $it['after'] || 'end' === $it['after'] ? 'sonda' : ( 0 === $it['after'] ? 'metnin başında' : $it['after'] . '. paragraftan sonra' );
+				$parts[] = ( $it['img'] ? $it['img'] . '. fotoğraf' : 'sıradaki fotoğraf' ) . ' → ' . $where;
+			}
+			$t .= '<b>Görsel yerleşimi:</b> ' . esc_html( implode( '; ', $parts ) ) . "\n";
+		}
 		$t .= '<b>Durum:</b> ' . $this->status_label( $p->post_status ) . "\n";
 		if ( $sens && 'publish' !== $p->post_status ) {
 			$t .= "\n⚠️ <b>Hassas içerik olabilir</b> (" . esc_html( implode( ', ', array_slice( $sens, 0, 4 ) ) ) . "). Yayınlamadan önce isim ve iddiaları kontrol et.\n";
