@@ -353,7 +353,10 @@ class YDTG_Analyzer {
 		$ord   = '(\d+|ilk|birinci|ikinci|ucuncu|dorduncu|besinci|altinci|yedinci|sekizinci|dokuzuncu|onuncu)';
 		$pic   = '(?:fotograf|foto|gorsel|resim|kare)';
 		foreach ( explode( "\n", (string) $text ) as $raw ) {
-			$line = trim( self::strip_marks( preg_replace( '/^\s*([-•*–]|\d+[.)])\s+/u', '', trim( $raw ) ) ) );
+			$line = preg_replace( '/^\s*[-•*–]\s+/u', '', trim( $raw ) );
+			// "1) ..." gibi liste numarası silinir; "2. fotoğraf" ise fotoğraf numarasıdır, korunur.
+			$line = preg_replace( '/^\d+[.)]\s+(?!(?:foto|görsel|gorsel|resim|kare|fotoğraf))/iu', '', $line );
+			$line = trim( self::strip_marks( $line ) );
 			if ( '' === $line ) {
 				continue;
 			}
