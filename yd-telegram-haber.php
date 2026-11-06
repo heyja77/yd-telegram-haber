@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           1.8.0
+ * Version:           1.8.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '1.8.0' );
+define( 'YDTG_VERSION', '1.8.1' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -39,6 +39,27 @@ class YDTG_Plugin {
 		add_action( 'transition_post_status', array( __CLASS__, 'queue_warm' ), 99, 3 );
 		add_action( 'shutdown', array( __CLASS__, 'warm_cache' ), 99 );
 		add_action( 'admin_init', array( __CLASS__, 'upgrade' ) );
+		add_filter( 'the_content', array( __CLASS__, 'sponsored_links' ), 20 );
+	}
+
+	/** Tanıtım haberlerindeki dış bağlantılar Google için "sponsorlu" olarak işaretlenir. */
+	public static function sponsored_links( $html ) {
+		if ( ! is_singular( 'post' ) || ! has_category( 'tanitim' ) || false === stripos( $html, '<a ' ) ) {
+			return $html;
+		}
+		$host = wp_parse_url( home_url(), PHP_URL_HOST );
+		return preg_replace_callback(
+			'#<a\s[^>]*>#i',
+			function ( $m ) use ( $host ) {
+				$tag = $m[0];
+				if ( ! preg_match( '#href=["\']https?://([^/"\']+)#i', $tag, $h ) || false !== stripos( $h[1], $host ) ) {
+					return $tag;
+				}
+				$tag = preg_replace( '#\srel=(["\'])[^"\']*\1#i', '', $tag );
+				return preg_replace( '#^<a\s#i', '<a rel="sponsored nofollow noopener" ', $tag );
+			},
+			$html
+		);
 	}
 
 	/** Sürüm geçişleri: 1.6.2 — tagline'ı boş olan Telegram haberlerine spotlarını tagline olarak yaz. */
