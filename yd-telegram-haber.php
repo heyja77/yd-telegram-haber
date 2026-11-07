@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           1.9.0
+ * Version:           1.9.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '1.9.0' );
+define( 'YDTG_VERSION', '1.9.1' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -40,9 +40,23 @@ class YDTG_Plugin {
 		add_action( 'shutdown', array( __CLASS__, 'warm_cache' ), 99 );
 		add_action( 'admin_init', array( __CLASS__, 'upgrade' ) );
 		add_filter( 'the_content', array( __CLASS__, 'sponsored_links' ), 20 );
+		// Yorumlarda "İnternet sitesi" alanı yok; gelen adres de kaydedilmez ve gösterilmez (spam bağlantılarını keser).
+		add_filter( 'comment_form_default_fields', array( __CLASS__, 'comment_fields' ) );
+		add_filter( 'preprocess_comment', array( __CLASS__, 'comment_no_url' ) );
+		add_filter( 'get_comment_author_url', '__return_empty_string' );
 	}
 
 	/** Tanıtım haberlerindeki dış bağlantılar Google için "sponsorlu" olarak işaretlenir. */
+	public static function comment_fields( $fields ) {
+		unset( $fields['url'] );
+		return $fields;
+	}
+
+	public static function comment_no_url( $data ) {
+		$data['comment_author_url'] = '';
+		return $data;
+	}
+
 	public static function sponsored_links( $html ) {
 		if ( ! is_singular( 'post' ) || ! has_category( 'tanitim' ) || false === stripos( $html, '<a ' ) ) {
 			return $html;
