@@ -110,7 +110,7 @@ class YDTG_Share {
 [data-theme="dark"] .yd-share-l small{color:#9aa0b8}
 [data-theme="dark"] .yd-share .yd-sh{background:#0f1430;border-color:#262b45;color:#eef0f8!important}
 [data-theme="dark"] .yd-share .yd-sh.cp{--c:#3b4aa8}
-@media (max-width:600px){.yd-share{padding:14px}.yd-share-b{display:grid;grid-template-columns:1fr 1fr;width:100%}.yd-share .yd-sh{height:46px}}
+@media (max-width:600px){.yd-share{padding:14px}.yd-share-b{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.yd-share .yd-sh{height:46px;min-width:0;padding:0 10px;gap:8px;white-space:nowrap}.yd-share .yd-sh.cp{white-space:normal;line-height:1.15;text-align:left}}
 .yd-share-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:99999;background:#050a30;color:#fff;padding:10px 16px;border-radius:999px;font-weight:700;font-size:14px;max-width:calc(100% - 32px);text-align:center}
 </style>
 <script id="yd-share-js">
