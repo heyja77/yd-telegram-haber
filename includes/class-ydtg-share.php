@@ -20,6 +20,18 @@ class YDTG_Share {
 		add_filter( 'get_the_excerpt', array( __CLASS__, 'excerpt_on' ), 0 );
 		add_filter( 'get_the_excerpt', array( __CLASS__, 'excerpt_off' ), 999 );
 		add_action( 'wp_footer', array( __CLASS__, 'assets' ), 50 );
+		// Temanın haber sonundaki eski paylaşım çubuğu kapatılır (yerine bu bölüm gelir).
+		// Yalnızca sitede okunurken değiştirilir; tema ayarlarında kayıtlı değer olduğu gibi kalır.
+		if ( ! is_admin() || wp_doing_ajax() ) {
+			add_filter( 'option_foxiz_theme_options', array( __CLASS__, 'theme_options' ) );
+		}
+	}
+
+	public static function theme_options( $o ) {
+		if ( is_array( $o ) ) {
+			$o['share_bottom'] = 0;
+		}
+		return $o;
 	}
 
 	public static function excerpt_on( $e ) {
