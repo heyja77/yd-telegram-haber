@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           1.9.3
+ * Version:           1.9.4
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '1.9.3' );
+define( 'YDTG_VERSION', '1.9.4' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -45,9 +45,29 @@ class YDTG_Plugin {
 		add_filter( 'comment_form_default_fields', array( __CLASS__, 'comment_fields' ) );
 		add_filter( 'preprocess_comment', array( __CLASS__, 'comment_no_url' ) );
 		add_filter( 'get_comment_author_url', '__return_empty_string' );
+		// Önceki/sonraki haber: köşe yazısında yalnızca köşe yazıları, haberde yalnızca haberler.
+		add_filter( 'get_previous_post_where', array( __CLASS__, 'adjacent_where' ), 10, 5 );
+		add_filter( 'get_next_post_where', array( __CLASS__, 'adjacent_where' ), 10, 5 );
 	}
 
 	/** Tanıtım haberlerindeki dış bağlantılar Google için "sponsorlu" olarak işaretlenir. */
+	const COLUMN_CAT = 'kose-yazilari';
+
+	public static function adjacent_where( $where, $in_same_term = false, $excluded = '', $taxonomy = 'category', $post = null ) {
+		global $wpdb;
+		$post = get_post( $post );
+		$term = get_term_by( 'slug', self::COLUMN_CAT, 'category' );
+		if ( ! $post || 'post' !== $post->post_type || ! $term ) {
+			return $where;
+		}
+		$sub = $wpdb->prepare(
+			"SELECT tr.object_id FROM {$wpdb->term_relationships} tr INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tt.taxonomy = 'category' AND tt.term_id = %d",
+			$term->term_id
+		);
+		$in = has_category( (int) $term->term_id, $post );
+		return $where . ( $in ? ' AND p.ID IN (' : ' AND p.ID NOT IN (' ) . $sub . ')';
+	}
+
 	public static function comment_fields( $fields ) {
 		unset( $fields['url'] );
 		return $fields;
