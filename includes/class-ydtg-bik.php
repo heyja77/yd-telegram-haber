@@ -19,7 +19,7 @@ class YDTG_BIK {
 	public static function init() {
 		add_action( 'wp_head', array( __CLASS__, 'meta' ), 2 );
 		add_filter( 'the_content', array( __CLASS__, 'wrap' ), 1 );
-		add_filter( 'the_content', array( __CLASS__, 'dates' ), 99 );
+		add_action( 'template_redirect', array( __CLASS__, 'buffer' ), 1 );
 		add_action( 'wp_head', array( __CLASS__, 'css' ), 50 );
 		// Yoast'un eski haberlerde yanlış saat dilimiyle yazdığı yayın saatini kaldır (temanın doğru etiketi kalır).
 		add_filter( 'wpseo_frontend_presenter_classes', array( __CLASS__, 'drop_yoast_times' ) );
@@ -105,22 +105,42 @@ class YDTG_BIK {
 		return '<div id="haberMetni" class="yd-haber-metni rbct" property="articleBody">' . "\n\n" . $content . $tail . "\n\n" . '</div>';
 	}
 
-	/** İlk yayın ve güncelleme tarih/saatini haberin en üstüne sabit olarak yaz. */
-	public static function dates( $content ) {
-		if ( ! self::is_target() || ! in_the_loop() || ! is_main_query() || get_the_ID() !== get_queried_object_id() ) {
-			return $content;
+	/** Haber sayfasının çıktısını yakala: tarih satırını spotun hemen altına yerleştir. */
+	public static function buffer() {
+		if ( ! self::is_target( get_queried_object_id() ) ) {
+			return;
 		}
-		$p    = get_post();
+		ob_start( array( __CLASS__, 'insert_dates' ) );
+	}
+
+	public static function insert_dates( $html ) {
+		$pid = get_queried_object_id();
+		if ( ! $pid || false !== strpos( $html, 'class="yd-tarihler"' ) ) {
+			return $html;
+		}
+		$line = self::date_line( $pid );
+		// Spot (s-tagline) varsa altına; yoksa başlığın (s-title) altına. Yalnızca ilk eşleşme (ana haber).
+		$out = preg_replace( '#(<h2[^>]*class="[^"]*\bs-tagline\b[^"]*"[^>]*>.*?</h2>)#s', '$1' . $line, $html, 1, $n );
+		if ( ! $n ) {
+			$out = preg_replace( '#(<h1[^>]*class="[^"]*\bs-title\b[^"]*"[^>]*>.*?</h1>)#s', '$1' . $line, $html, 1, $n );
+		}
+		return ( $n && null !== $out ) ? $out : $html;
+	}
+
+	/** İlk yayın ve (varsa) güncelleme tarih/saati; sayfa her açıldığında aynı kalır. */
+	public static function date_line( $pid ) {
+		$p    = get_post( $pid );
 		$fmt  = 'j F Y, H:i';
 		$pub  = date_create_immutable( $p->post_date, wp_timezone() );
 		$mod  = date_create_immutable( $p->post_modified, wp_timezone() );
-		$html = '<div class="yd-tarihler"><span>Yayınlanma: <time datetime="' . esc_attr( $pub->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $pub->getTimestamp() ) ) . '</time></span>';
+		$clk  = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+		$upd  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>';
+		$html = '<div class="yd-tarihler"><span>' . $clk . 'Yayınlanma: <time datetime="' . esc_attr( $pub->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $pub->getTimestamp() ) ) . '</time></span>';
 		// Yalnızca gerçekten sonradan düzenlenmişse (5 dakikadan fazla fark) güncelleme saatini göster.
 		if ( $mod->getTimestamp() - $pub->getTimestamp() > 300 ) {
-			$html .= '<span>Güncelleme: <time datetime="' . esc_attr( $mod->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $mod->getTimestamp() ) ) . '</time></span>';
+			$html .= '<span>' . $upd . 'Güncelleme: <time datetime="' . esc_attr( $mod->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $mod->getTimestamp() ) ) . '</time></span>';
 		}
-		$html .= '</div>';
-		return $html . $content;
+		return $html . '</div>';
 	}
 
 	public static function css() {
@@ -129,12 +149,16 @@ class YDTG_BIK {
 		}
 		?>
 <style id="yd-bik-css">
-.yd-tarihler{display:flex;flex-wrap:wrap;gap:4px 18px;margin:0 0 22px;padding:10px 14px;border-left:3px solid #e1251b;background:rgba(5,10,48,.04);border-radius:0 8px 8px 0;font-size:14px;line-height:1.4;color:#5b6078}
+.yd-tarihler{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;margin:14px 0 4px;font-size:14px;line-height:1.4;color:#6b7088}
+.yd-tarihler span{display:inline-flex;align-items:center;gap:6px}
+.yd-tarihler svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;opacity:.8}
 .yd-tarihler time{font-weight:600;color:#050a30}
-[data-theme="dark"] .yd-tarihler{background:rgba(255,255,255,.05);color:#a9adc2}
+[data-theme="dark"] .yd-tarihler{color:#a9adc2}
 [data-theme="dark"] .yd-tarihler time{color:#fff}
+.single-meta .smeta-bottom{display:none}
+.single-meta .smeta-extra:not(:has(*)){display:none}
 .yd-mahrec{margin-top:26px!important;font-size:14px;font-weight:600;color:#5b6078}
-.single-meta .updated-date{display:none}
+[data-theme="dark"] .yd-mahrec{color:#a9adc2}
 .rbct > .yd-haber-metni{font-size:inherit!important;margin-bottom:0}
 </style>
 		<?php
