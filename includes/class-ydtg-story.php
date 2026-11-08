@@ -35,7 +35,7 @@ class YDTG_Story {
 	// Özet
 	const SUM_SIZE = 27, SUM_LH = 39, SUM_TRACK = 0, SUM_GAP = 64; // son başlık satırı tabanından ilk özet satırı tabanına
 	const SUM_COLOR = array( 188, 191, 202 );
-	const SUM_MAX_LINES = 2;
+	const SUM_MAX_LINES = 4;
 
 	// Fotoğraf yerleşimi (referans: kaplama × 1.174, yatayda odak noktası, altta hizalı)
 	const PHOTO_ZOOM = 1.174;
@@ -193,7 +193,7 @@ class YDTG_Story {
 		return '';
 	}
 
-	/** Özeti en çok 2 satıra sığdır; sığmazsa null. */
+	/** Özeti en çok 4 satıra sığdır; sığmazsa null. */
 	public static function fit_summary( $sum ) {
 		$lines = self::wrap( $sum, self::font( 400 ), self::SUM_SIZE, self::SUM_TRACK, self::TEXT_W );
 		return ( $lines && count( $lines ) <= self::SUM_MAX_LINES ) ? $lines : null;
@@ -226,7 +226,7 @@ class YDTG_Story {
 		// Virgülle ayrılmış başlangıç parçaları (ör. "X, Y yaptı" → bütün cümle sığmazsa denenmez; yalnızca tam cümleler).
 		foreach ( $cands as $c ) {
 			$words = preg_split( '/\s+/u', $c );
-			if ( count( $words ) <= 24 && self::fit_summary( $c ) ) {
+			if ( count( $words ) <= 50 && self::fit_summary( $c ) ) {
 				return $c;
 			}
 		}
@@ -351,7 +351,7 @@ class YDTG_Story {
 			$err[] = 'Başlık güvenli alana sığmıyor.';
 		}
 		if ( ! $S ) {
-			$err[] = 'Story özeti iki satıra sığmıyor.';
+			$err[] = 'Story özeti dört satıra sığmıyor.';
 		}
 		if ( '' === $cat || self::width( $cat, self::font( 600 ), self::CAT_SIZE, self::CAT_TRACK ) > 600 ) {
 			$err[] = 'Kategori etiketi boş ya da çok uzun.';
@@ -447,7 +447,7 @@ class YDTG_Story {
 			'boyut 1080×1920'            => imagesx( $im ) === self::W && imagesy( $im ) === self::H,
 			'fotoğraf alanı tam dolu'     => $dx <= 0 && $dx + $dw >= self::W && $dy <= 0,
 			'başlık satırları alan içinde' => max( array_map( function ( $l ) use ( $tf, $T ) { return YDTG_Story::width( $l, $tf, $T['size'], $T['track'] ); }, $T['lines'] ) ) <= self::TEXT_W,
-			'özet en çok 2 satır'          => count( $S ) <= 2,
+			'özet en çok 4 satır'          => count( $S ) <= self::SUM_MAX_LINES,
 			'metin alt boş alana taşmıyor' => $sum_bottom < 1600,
 		);
 		foreach ( $checks as $k => $ok ) {

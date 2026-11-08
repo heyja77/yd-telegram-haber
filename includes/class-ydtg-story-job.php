@@ -171,8 +171,8 @@ class YDTG_Story_Job {
 			foreach ( $err as $e ) {
 				if ( false !== strpos( $e, 'özeti' ) ) {
 					$tips[] = '' === $own
-						? 'Mesajda <b>STORY ÖZETİ</b> satırı bulunamadı; haberin spotu da iki satırdan uzun. Önizleme mesajına yanıt olarak <code>STORY ÖZETİ: …</code> yaz (10–18 kelime).'
-						: 'Mesajdaki Story metni iki satıra sığmadı (' . mb_strlen( $own, 'UTF-8' ) . ' karakter): <i>' . esc_html( $own ) . '</i>' . "\n" . 'Daha kısa bir hâlini <code>STORY ÖZETİ: …</code> olarak yanıtla (10–18 kelime).';
+						? 'Mesajda <b>STORY ÖZETİ</b> satırı bulunamadı; haberin spotu da dört satırdan uzun. Önizleme mesajına yanıt olarak <code>STORY ÖZETİ: …</code> yaz (20–35 kelime).'
+						: 'Mesajdaki Story metni dört satıra sığmadı (' . mb_strlen( $own, 'UTF-8' ) . ' karakter): <i>' . esc_html( $own ) . '</i>' . "\n" . 'Daha kısa bir hâlini <code>STORY ÖZETİ: …</code> olarak yanıtla (20–35 kelime).';
 				} elseif ( false !== strpos( $e, 'Başlık' ) ) {
 					$tips[] = 'Önizleme mesajına yanıt olarak <code>STORY BAŞLIĞI: …</code> yaz (kısa hali).';
 				} elseif ( false !== strpos( $e, 'fotoğraf' ) ) {

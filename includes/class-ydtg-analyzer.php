@@ -343,7 +343,7 @@ class YDTG_Analyzer {
 			$out[] = $line;
 		}
 		foreach ( array( 'summary', 'title', 'tag' ) as $k ) {
-			$st[ $k ] = trim( preg_replace( '/\s+/u', ' ', $st[ $k ] ), " \t\"“”" );
+			$st[ $k ] = trim( preg_replace( '/\s+/u', ' ', $st[ $k ] ), " \t\"“”:;–—-" );
 		}
 		return array( rtrim( implode( "\n", $out ) ), $st );
 	}
