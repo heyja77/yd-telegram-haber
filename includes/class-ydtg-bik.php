@@ -137,7 +137,7 @@ class YDTG_BIK {
 		$mod  = date_create_immutable( $p->post_modified, wp_timezone() );
 		$clk  = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 		$upd  = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>';
-		$html = '<div class="yd-tarihler"><span>' . $clk . 'Yayınlanma: <time datetime="' . esc_attr( $pub->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $pub->getTimestamp() ) ) . '</time></span>';
+		$html = '<div class="yd-tarihler meta-text"><span>' . $clk . 'Yayınlanma: <time datetime="' . esc_attr( $pub->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $pub->getTimestamp() ) ) . '</time></span>';
 		// Yalnızca gerçekten sonradan düzenlenmişse (5 dakikadan fazla fark) güncelleme saatini göster.
 		if ( $mod->getTimestamp() - $pub->getTimestamp() > 300 ) {
 			$html .= '<span>' . $upd . 'Güncelleme: <time datetime="' . esc_attr( $mod->format( 'c' ) ) . '">' . esc_html( wp_date( $fmt, $mod->getTimestamp() ) ) . '</time></span>';
@@ -151,12 +151,10 @@ class YDTG_BIK {
 		}
 		?>
 <style id="yd-bik-css">
-.yd-tarihler{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;margin:0 0 15px;font-size:14px;line-height:1.4;color:#6b7088}
+.yd-tarihler{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;margin:0 0 15px;font-family:var(--meta-family);font-size:var(--meta-fsize);font-weight:var(--meta-fweight);color:var(--meta-b-fcolor)}
 .yd-tarihler span{display:inline-flex;align-items:center;gap:6px}
-.yd-tarihler svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;opacity:.8}
-.yd-tarihler time{font-weight:600;color:#050a30}
-[data-theme="dark"] .yd-tarihler{color:#a9adc2}
-[data-theme="dark"] .yd-tarihler time{color:#fff}
+.yd-tarihler svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;opacity:.6}
+.yd-tarihler time{font-weight:inherit;color:inherit}
 .single-meta .smeta-bottom{display:none}
 .single-header .single-meta{margin-bottom:10px}
 .single-meta .smeta-extra:not(:has(*)){display:none}
