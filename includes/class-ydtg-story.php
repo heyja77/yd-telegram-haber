@@ -205,7 +205,7 @@ class YDTG_Story {
 	 * Hiçbir parça temiz sığmıyorsa boş döner (story gönderilmez, kullanıcıya sorulur). Metne sözcük eklenmez.
 	 */
 	public static function story_summary( $explicit, $spot ) {
-		$explicit = trim( preg_replace( '/\s+/u', ' ', (string) $explicit ) );
+		$explicit = trim( preg_replace( '/\s+/u', ' ', (string) $explicit ), " \t:;–—-\"“”" );
 		if ( '' !== $explicit ) {
 			if ( self::fit_summary( $explicit ) ) {
 				return $explicit;
