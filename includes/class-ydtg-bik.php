@@ -105,7 +105,7 @@ class YDTG_BIK {
 		return '<div id="haberMetni" class="yd-haber-metni rbct" property="articleBody">' . "\n\n" . $content . $tail . "\n\n" . '</div>';
 	}
 
-	/** Haber sayfasının çıktısını yakala: tarih satırını spotun hemen altına yerleştir. */
+	/** Haber sayfasının çıktısını yakala: tarih satırını yazar bilgisinin altına yerleştir. */
 	public static function buffer() {
 		if ( ! self::is_target( get_queried_object_id() ) ) {
 			return;
@@ -119,10 +119,12 @@ class YDTG_BIK {
 			return $html;
 		}
 		$line = self::date_line( $pid );
-		// Spot (s-tagline) varsa altına; yoksa başlığın (s-title) altına. Yalnızca ilk eşleşme (ana haber).
-		$out = preg_replace( '#(<h2[^>]*class="[^"]*\bs-tagline\b[^"]*"[^>]*>.*?</h2>)#s', '$1' . $line, $html, 1, $n );
+		// Ana haber başlığının (s-title) ardından gelen ilk </header>'ın hemen önüne: yazar ve "Kaydet" satırının altı.
+		$n   = 0;
+		$out = preg_replace( '#(<h1[^>]*class="[^"]*\bs-title\b[^"]*"[^>]*>.*?)(</header>)#s', '$1' . $line . '$2', $html, 1, $n );
 		if ( ! $n ) {
-			$out = preg_replace( '#(<h1[^>]*class="[^"]*\bs-title\b[^"]*"[^>]*>.*?</h1>)#s', '$1' . $line, $html, 1, $n );
+			// Yedek: spotun (s-tagline) altına.
+			$out = preg_replace( '#(<h2[^>]*class="[^"]*\bs-tagline\b[^"]*"[^>]*>.*?</h2>)#s', '$1' . $line, $html, 1, $n );
 		}
 		return ( $n && null !== $out ) ? $out : $html;
 	}
@@ -149,13 +151,14 @@ class YDTG_BIK {
 		}
 		?>
 <style id="yd-bik-css">
-.yd-tarihler{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;margin:14px 0 4px;font-size:14px;line-height:1.4;color:#6b7088}
+.yd-tarihler{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;margin:0 0 15px;font-size:14px;line-height:1.4;color:#6b7088}
 .yd-tarihler span{display:inline-flex;align-items:center;gap:6px}
 .yd-tarihler svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;opacity:.8}
 .yd-tarihler time{font-weight:600;color:#050a30}
 [data-theme="dark"] .yd-tarihler{color:#a9adc2}
 [data-theme="dark"] .yd-tarihler time{color:#fff}
 .single-meta .smeta-bottom{display:none}
+.single-header .single-meta{margin-bottom:10px}
 .single-meta .smeta-extra:not(:has(*)){display:none}
 .yd-mahrec{margin-top:26px!important;font-size:14px;font-weight:600;color:#5b6078}
 [data-theme="dark"] .yd-mahrec{color:#a9adc2}
