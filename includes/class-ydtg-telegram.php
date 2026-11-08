@@ -74,6 +74,46 @@ class YDTG_Telegram {
 		return $this->call( 'editMessageText', $p );
 	}
 
+	/**
+	 * Dosyayı belge olarak gönderir (Telegram sıkıştırmaz). Dönüş: Telegram'ın mesaj nesnesi veya WP_Error.
+	 */
+	public function send_document( $chat_id, $path, $caption = '', $filename = '' ) {
+		if ( ! $this->ok() ) {
+			return new WP_Error( 'ydtg_token', 'Bot token girilmemiş veya hatalı.' );
+		}
+		if ( ! is_readable( $path ) ) {
+			return new WP_Error( 'ydtg_file', 'Gönderilecek dosya okunamadı.' );
+		}
+		$boundary = 'ydtg' . wp_generate_password( 24, false, false );
+		$name     = $filename ? $filename : basename( $path );
+		$fields   = array( 'chat_id' => (string) $chat_id, 'caption' => $caption, 'parse_mode' => 'HTML' );
+		$body     = '';
+		foreach ( $fields as $k => $v ) {
+			$body .= "--{$boundary}\r\nContent-Disposition: form-data; name=\"{$k}\"\r\n\r\n{$v}\r\n";
+		}
+		$body .= "--{$boundary}\r\nContent-Disposition: form-data; name=\"document\"; filename=\"{$name}\"\r\nContent-Type: image/png\r\n\r\n";
+		$body .= file_get_contents( $path ) . "\r\n--{$boundary}--\r\n";
+		$res = wp_remote_post(
+			'https://api.telegram.org/bot' . $this->token . '/sendDocument',
+			array(
+				'timeout' => 60,
+				'headers' => array( 'Content-Type' => 'multipart/form-data; boundary=' . $boundary ),
+				'body'    => $body,
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			YDTG_Plugin::log( 'Telegram bağlantı hatası (sendDocument): ' . $res->get_error_message(), 'error' );
+			return $res;
+		}
+		$data = json_decode( wp_remote_retrieve_body( $res ), true );
+		if ( empty( $data['ok'] ) ) {
+			$desc = isset( $data['description'] ) ? $data['description'] : 'bilinmeyen hata';
+			YDTG_Plugin::log( 'Telegram hatası (sendDocument): ' . $desc, 'error' );
+			return new WP_Error( 'ydtg_api', $desc );
+		}
+		return $data['result'];
+	}
+
 	public function answer_callback( $id, $text = '' ) {
 		return $this->call( 'answerCallbackQuery', array( 'callback_query_id' => $id, 'text' => $text ) );
 	}

@@ -86,6 +86,17 @@ class YDTG_Handler {
 
 		// Düzenleme: "Başlık: ..." / "Metin: ..." (önizlemeye yanıt veya son taslak).
 		// Başlık + özet/metin içeren tam bir haber (yanıt değilse) yeni taslak olur.
+		// Yalnızca Story satırları (ör. önizlemeye yanıt "STORY ÖZETİ: …") düzenlemedir, yeni haber değil.
+		list( $rest_text, $story_only ) = YDTG_Analyzer::extract_story( $text );
+		if ( ! $has_media && '' === trim( $rest_text ) && ( $story_only['summary'] || $story_only['title'] || $story_only['tag'] || $story_only['img'] || $story_only['mode'] ) ) {
+			$pid = $reply_pid ? $reply_pid : $this->current_post();
+			if ( $pid && $this->edit_post_fields( $pid, $text ) ) {
+				$this->refresh_preview( $pid, $chat, true );
+			} else {
+				$this->tg->send( $chat, 'Story bilgisini ekleyecek bir haber bulamadım. Önizleme mesajına <b>yanıt</b> olarak yaz.' );
+			}
+			return;
+		}
 		$lab  = YDTG_Analyzer::split_labels( $text );
 		$full = isset( $lab['fields']['baslik'] ) && ( isset( $lab['fields']['spot'] ) || isset( $lab['fields']['metin'] ) );
 		if ( ! $has_media && $lab['first'] && ( $reply_pid || ! $full ) ) {
@@ -271,6 +282,7 @@ class YDTG_Handler {
 		update_post_meta( $pid, '_ydtg_source', 'telegram' );
 		update_post_meta( $pid, '_ydtg_fmt', $parsed['strict'] ? 2 : 1 );
 		update_post_meta( $pid, '_ydtg_layout', $parsed['layout'] );
+		self::save_story_meta( $pid, $parsed['story'] );
 		self::set_tagline( $pid, $spot );
 		$this->update_seo( $pid, $title, $spot, $tags );
 
@@ -410,7 +422,13 @@ class YDTG_Handler {
 			$ext = strtolower( pathinfo( $name, PATHINFO_EXTENSION ) );
 		}
 		// Dikey fotoğraf: yatay kareye oturt, kenarlara bulanık arka plan.
+		$orig = '';
 		if ( 'image' === $type ) {
+			// Dikey fotoğrafın asıl hali Story için saklanır (sitede yatay hali kullanılır).
+			$orig = wp_tempnam( 'ydtg-orig' );
+			if ( ! @copy( $dl['tmp'], $orig ) ) {
+				$orig = '';
+			}
 			$conv = YDTG_Image::landscape( $dl['tmp'] );
 			if ( $conv ) {
 				$ext = $conv;
@@ -432,6 +450,17 @@ class YDTG_Handler {
 			return 0;
 		}
 		update_post_meta( $att, '_ydtg_type', $type );
+		if ( $orig ) {
+			if ( ! empty( $conv ) ) {
+				$dir  = YDTG_Story_Job::dir() . '/orig';
+				wp_mkdir_p( $dir );
+				$dest = $dir . '/' . (int) $att . '.' . ( strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ) ?: 'jpg' );
+				if ( @rename( $orig, $dest ) || @copy( $orig, $dest ) ) {
+					update_post_meta( $att, '_ydtg_orig', $dest );
+				}
+			}
+			@unlink( $orig );
+		}
 		return (int) $att;
 	}
 
@@ -534,6 +563,19 @@ class YDTG_Handler {
 		wp_update_post( array( 'ID' => $pid, 'post_content' => $html ) );
 	}
 
+	/** Mesajdaki Story satırlarını habere kaydeder (yalnızca dolu olanları). */
+	public static function save_story_meta( $pid, $st ) {
+		$map = array( 'summary' => '_ydtg_story', 'title' => '_ydtg_story_title', 'tag' => '_ydtg_story_tag', 'img' => '_ydtg_story_img', 'mode' => '_ydtg_story_mode' );
+		$any = false;
+		foreach ( $map as $k => $meta ) {
+			if ( ! empty( $st[ $k ] ) ) {
+				update_post_meta( $pid, $meta, $st[ $k ] );
+				$any = true;
+			}
+		}
+		return $any;
+	}
+
 	/** Haber içi tek fotoğraf (WordPress'in kendi boyutlarıyla; WebP sürümleri korunur). */
 	public static function figure( $att ) {
 		$img = wp_get_attachment_image( (int) $att, 'large' );
@@ -552,9 +594,14 @@ class YDTG_Handler {
 		$title = $p->post_title;
 		$spot  = $p->post_excerpt;
 		$body  = (string) get_post_meta( $pid, '_ydtg_body', true );
-		$f     = YDTG_Analyzer::labeled_fields( $text );
+		list( $text, $story ) = YDTG_Analyzer::extract_story( $text );
+		$story_changed        = self::save_story_meta( $pid, $story );
+		$f                    = YDTG_Analyzer::labeled_fields( $text );
 		if ( ! $f ) {
-			return false;
+			if ( $story_changed ) {
+				YDTG_Plugin::log( 'Story bilgisi güncellendi (#' . $pid . ')' );
+			}
+			return $story_changed;
 		}
 		if ( isset( $f['baslik'] ) && '' !== $f['baslik'] ) {
 			$title = YDTG_Analyzer::clean_title( $f['baslik'] );
@@ -710,6 +757,10 @@ class YDTG_Handler {
 			}
 			$t .= '<b>Görsel yerleşimi:</b> ' . esc_html( implode( '; ', $parts ) ) . "\n";
 		}
+		$ss = (string) get_post_meta( $pid, '_ydtg_story', true );
+		$si = (int) get_post_meta( $pid, '_ydtg_story_img', true );
+		$sm = (string) get_post_meta( $pid, '_ydtg_story_mode', true );
+		$t .= '<b>Story metni:</b> ' . ( '' !== $ss ? esc_html( $ss ) : '<i>yok, spot kullanılacak</i>' ) . ( $si || $sm ? ' (' . ( $si ? $si . '. fotoğraf' : 'kapak' ) . ( $sm ? ', ' . esc_html( $sm ) : '' ) . ')' : '' ) . "\n";
 		$t .= '<b>Durum:</b> ' . $this->status_label( $p->post_status ) . "\n";
 		if ( $sens && 'publish' !== $p->post_status ) {
 			$t .= "\n⚠️ <b>Hassas içerik olabilir</b> (" . esc_html( implode( ', ', array_slice( $sens, 0, 4 ) ) ) . "). Yayınlamadan önce isim ve iddiaları kontrol et.\n";
@@ -731,6 +782,7 @@ class YDTG_Handler {
 					array( 'text' => '✏️ Düzenle', 'callback_data' => 'e:' . $p->ID ),
 					array( 'text' => '🗑 Yayından kaldır', 'callback_data' => 'x:' . $p->ID ),
 				),
+				array( array( 'text' => '📸 Story\'yi yeniden üret', 'callback_data' => 'y:' . $p->ID ) ),
 			);
 		}
 		return array(
@@ -934,6 +986,14 @@ class YDTG_Handler {
 		update_post_meta( $pid, '_ydtg_preview_msg', $mid );
 
 		switch ( $act ) {
+			case 'y': // Instagram Story'yi (yeniden) üret.
+				if ( 'publish' !== $p->post_status ) {
+					$this->tg->answer_callback( $cb['id'], 'Story, haber yayınlandıktan sonra hazırlanır.' );
+					return;
+				}
+				YDTG_Story_Job::queue( $pid, true, 1 );
+				$this->tg->answer_callback( $cb['id'], 'Story hazırlanıyor…' );
+				return;
 			case 'p': // Yayınla.
 				if ( 'publish' === $p->post_status ) {
 					$this->tg->answer_callback( $cb['id'], 'Zaten yayında.' );

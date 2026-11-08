@@ -262,6 +262,92 @@ class YDTG_Analyzer {
 		);
 	}
 
+	/** Story satırları: etiket (ASCII, küçük harf) => alan. */
+	public static $story_map = array(
+		'story ozeti'           => 'summary',
+		'story metni'           => 'summary',
+		'story'                 => 'summary',
+		'instagram story'       => 'summary',
+		'instagram story ozeti' => 'summary',
+		'instagram story metni' => 'summary',
+		'story basligi'         => 'title',
+		'story etiketi'         => 'tag',
+		'story fotografi'       => 'photo',
+		'story gorseli'         => 'photo',
+	);
+
+	/** "2. fotoğraf, tam" gibi Story fotoğraf seçimini okur. Dönüş: array( no, kip ) veya null. */
+	public static function story_photo( $v ) {
+		$f = self::fold( trim( $v ) );
+		$mode = '';
+		if ( preg_match( '/\b(tam|sol|orta|sag)\b/u', $f, $m ) ) {
+			$mode = $m[1];
+		}
+		if ( preg_match( '/^(\d+|ilk|birinci|ikinci|ucuncu|dorduncu|besinci)\s*\.?\s*(fotograf|foto|gorsel|resim|kare)\w*\s*[,;\-–]?\s*(tam|sol|orta|sag)?\s*\.?$/u', $f, $m ) ) {
+			return array( self::ordinal( $m[1] ), $mode );
+		}
+		if ( preg_match( '/^(tam|sol|orta|sag)\s*\.?$/u', $f ) ) {
+			return array( 0, $mode );
+		}
+		return null;
+	}
+
+	/**
+	 * Mesajdaki Story satırlarını ayırır (haber metnine ve görsel yerleşimine karışmaz).
+	 * Dönüş: array( temiz_metin, array( summary, title, tag, img, mode ) ).
+	 */
+	public static function extract_story( $text ) {
+		$lines = explode( "\n", str_replace( array( "\r\n", "\r" ), "\n", (string) $text ) );
+		$st    = array( 'summary' => '', 'title' => '', 'tag' => '', 'img' => 0, 'mode' => '' );
+		$out   = array();
+		$cur   = null;
+		foreach ( $lines as $line ) {
+			$plain = self::strip_marks( preg_replace( '/^\s*(#{1,6}|[-•*–])\s*/u', '', $line ) );
+			$key   = null;
+			$rest  = '';
+			if ( preg_match( '/^([\p{L} ]{3,30}?)\s*:\s*(.*)$/su', $plain, $m ) ) {
+				$name = trim( preg_replace( '/\s+/u', ' ', self::fold( $m[1] ) ) );
+				if ( isset( self::$story_map[ $name ] ) ) {
+					$key  = self::$story_map[ $name ];
+					$rest = trim( self::strip_marks( $m[2] ) );
+				}
+			}
+			if ( $key ) {
+				$ph = ( 'photo' === $key || 'summary' === $key ) ? self::story_photo( $rest ) : null;
+				if ( $ph ) {
+					if ( $ph[0] ) {
+						$st['img'] = $ph[0];
+					}
+					if ( $ph[1] ) {
+						$st['mode'] = $ph[1];
+					}
+					$cur = null;
+					continue;
+				}
+				if ( 'photo' === $key ) {
+					$cur = null;
+					continue;
+				}
+				$st[ $key ] = $rest;
+				$cur        = $key;
+				continue;
+			}
+			if ( null !== $cur ) {
+				if ( '' === trim( $line ) || self::label_line( $line ) ) {
+					$cur = null;
+				} else {
+					$st[ $cur ] = trim( $st[ $cur ] . ' ' . self::strip_marks( $line ) );
+					continue;
+				}
+			}
+			$out[] = $line;
+		}
+		foreach ( array( 'summary', 'title', 'tag' ) as $k ) {
+			$st[ $k ] = trim( preg_replace( '/\s+/u', ' ', $st[ $k ] ), " \t\"“”" );
+		}
+		return array( rtrim( implode( "\n", $out ) ), $st );
+	}
+
 	/** Mesaj yeni biçimde mi (ÖZET / HABER METNİ / GÖRSEL YERLEŞİMİ etiketlerinden biri var mı)? */
 	public static function is_strict( array $split ) {
 		return (bool) array_intersect( $split['names'], self::$strict_labels );
@@ -274,8 +360,10 @@ class YDTG_Analyzer {
 	 */
 	public static function parse_message( $text ) {
 		$text  = str_replace( array( "\r\n", "\r" ), "\n", trim( (string) $text ) );
+		list( $text, $story ) = self::extract_story( $text );
+		$text  = trim( $text );
 		$split = self::split_labels( $text );
-		$out   = array( 'title' => '', 'spot' => '', 'body' => '', 'layout' => array(), 'strict' => false, 'errors' => array() );
+		$out   = array( 'title' => '', 'spot' => '', 'body' => '', 'layout' => array(), 'strict' => false, 'errors' => array(), 'story' => $story );
 
 		if ( ! self::is_strict( $split ) ) {
 			list( $out['title'], $out['spot'], $out['body'] ) = self::parse_news( $text );

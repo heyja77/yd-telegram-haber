@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           1.9.5
+ * Version:           2.0.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '1.9.5' );
+define( 'YDTG_VERSION', '2.0.0' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -26,6 +26,8 @@ require_once YDTG_DIR . 'includes/class-ydtg-manset.php';
 require_once YDTG_DIR . 'includes/class-ydtg-updater.php';
 require_once YDTG_DIR . 'includes/class-ydtg-share.php';
 require_once YDTG_DIR . 'includes/class-ydtg-guard.php';
+require_once YDTG_DIR . 'includes/class-ydtg-story.php';
+require_once YDTG_DIR . 'includes/class-ydtg-story-job.php';
 
 class YDTG_Plugin {
 
@@ -348,6 +350,18 @@ class YDTG_Plugin {
 				$msg   = is_wp_error( $r ) ? 'err:' . $r->get_error_message() : 'ok:Test mesajı Telegram\'a gönderildi.';
 				break;
 
+			case 'story':
+				$pid = isset( $_POST['pid'] ) ? absint( $_POST['pid'] ) : 0;
+				$p   = $pid ? get_post( $pid ) : null;
+				if ( ! $p || 'post' !== $p->post_type || 'publish' !== $p->post_status ) {
+					$msg = 'err:Bu numarada yayında bir haber yok.';
+					break;
+				}
+				YDTG_Story_Job::run( $pid, 1 );
+				$st  = get_post_meta( $pid, '_ydtg_story_sent', true );
+				$msg = ( $st && 'hata' !== $st ) ? 'ok:Story üretildi ve Telegram\'a gönderildi.' : 'err:Story gönderilemedi; ayrıntı Telegram\'da ve işlem kayıtlarında.';
+				break;
+
 			case 'ecz_refresh':
 				$r   = YDTG_Pharmacy::refresh();
 				$n   = get_option( YDTG_Pharmacy::OPT_DATA );
@@ -499,6 +513,13 @@ class YDTG_Plugin {
 			echo '<p>Önce bot token\'ını kaydet.</p>';
 		}
 
+		// Instagram Story.
+		echo '<h2>Instagram Story</h2><p>Telegram\'dan girilen haber yayınlanınca Story görseli otomatik hazırlanıp sana Telegram\'dan dosya olarak gönderilir. Bir haberin Story\'sini elle üretmek için haber numarasını yaz:</p>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
+		wp_nonce_field( 'ydtg_action' );
+		echo '<input type="hidden" name="action" value="ydtg_action"><input type="hidden" name="do" value="story">';
+		echo '<input type="number" name="pid" min="1" placeholder="Haber no (ör. 3523)" style="width:180px"> <button class="button">Story üret ve Telegram\'a gönder</button></form>';
+
 		// Güncelleme.
 		echo '<h2>Güncelleme</h2><p>Kurulu sürüm: <strong>' . esc_html( YDTG_VERSION ) . '</strong>. Yeni sürümler GitHub\'dan (heyja77/yd-telegram-haber) gelir ve Eklentiler sayfasında normal güncelleme olarak görünür.</p><p>';
 		self::button( 'gh_check', 'Güncellemeleri şimdi denetle' );
@@ -542,4 +563,5 @@ YDTG_Home::init();
 YDTG_Manset::init();
 YDTG_Share::init();
 YDTG_Guard::init();
+YDTG_Story_Job::init();
 YDTG_Updater::init( __FILE__ );
