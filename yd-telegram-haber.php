@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           2.1.0
+ * Version:           2.2.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '2.1.0' );
+define( 'YDTG_VERSION', '2.2.0' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -29,6 +29,7 @@ require_once YDTG_DIR . 'includes/class-ydtg-guard.php';
 require_once YDTG_DIR . 'includes/class-ydtg-story.php';
 require_once YDTG_DIR . 'includes/class-ydtg-story-job.php';
 require_once YDTG_DIR . 'includes/class-ydtg-views.php';
+require_once YDTG_DIR . 'includes/class-ydtg-bik.php';
 
 class YDTG_Plugin {
 
@@ -579,4 +580,5 @@ YDTG_Share::init();
 YDTG_Guard::init();
 YDTG_Story_Job::init();
 YDTG_Views::init();
+YDTG_BIK::init();
 YDTG_Updater::init( __FILE__ );
