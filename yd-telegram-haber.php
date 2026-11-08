@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Yalova Dijital – Telegram Haber Girişi
  * Description:       Telegram botuna gönderilen başlık, metin ve fotoğrafları taslak haber olarak siteye ekler; kategori, etiket ve SEO alanlarını otomatik doldurur. Haberler yalnızca Telegram'daki YAYINLA butonuyla yayınlanır. Nöbetçi eczane listesi: [yd_nobetci_eczane]
- * Version:           2.0.0
+ * Version:           2.0.1
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            Yalova Dijital
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'YDTG_VERSION', '2.0.0' );
+define( 'YDTG_VERSION', '2.0.1' );
 define( 'YDTG_DIR', plugin_dir_path( __FILE__ ) );
 
 require_once YDTG_DIR . 'includes/class-ydtg-analyzer.php';
@@ -519,6 +519,19 @@ class YDTG_Plugin {
 		wp_nonce_field( 'ydtg_action' );
 		echo '<input type="hidden" name="action" value="ydtg_action"><input type="hidden" name="do" value="story">';
 		echo '<input type="number" name="pid" min="1" placeholder="Haber no (ör. 3523)" style="width:180px"> <button class="button">Story üret ve Telegram\'a gönder</button></form>';
+		$recent = get_posts( array( 'numberposts' => 6, 'post_status' => array( 'publish', 'draft' ), 'meta_key' => '_ydtg_source', 'meta_value' => 'telegram' ) );
+		if ( $recent ) {
+			echo '<table class="widefat striped" style="max-width:900px;margin-top:10px"><thead><tr><th>No</th><th>Haber</th><th>Story metni (ChatGPT)</th><th>Fotoğraf</th><th>Durum</th></tr></thead><tbody>';
+			foreach ( $recent as $r ) {
+				$st   = get_post_meta( $r->ID, '_ydtg_story_sent', true );
+				$txt  = (string) get_post_meta( $r->ID, '_ydtg_story', true );
+				$img  = (int) get_post_meta( $r->ID, '_ydtg_story_img', true );
+				$mode = (string) get_post_meta( $r->ID, '_ydtg_story_mode', true );
+				$durum = 'publish' !== $r->post_status ? 'taslak' : ( 'hata' === $st ? '⚠️ hazırlanamadı' : ( $st ? '✅ ' . wp_date( 'd.m H:i', (int) $st ) : ( wp_next_scheduled( YDTG_Story_Job::HOOK, array( $r->ID, 0 ) ) ? '⏳ sırada' : '—' ) ) );
+				echo '<tr><td>' . (int) $r->ID . '</td><td>' . esc_html( get_the_title( $r ) ) . '</td><td>' . ( '' !== $txt ? esc_html( $txt ) . ' <small>(' . mb_strlen( $txt, 'UTF-8' ) . ' karakter)</small>' : '<em>yok (spot kullanılır)</em>' ) . '</td><td>' . ( $img ? $img . '. fotoğraf' : 'kapak' ) . ( $mode ? ', ' . esc_html( $mode ) : '' ) . '</td><td>' . esc_html( $durum ) . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
 
 		// Güncelleme.
 		echo '<h2>Güncelleme</h2><p>Kurulu sürüm: <strong>' . esc_html( YDTG_VERSION ) . '</strong>. Yeni sürümler GitHub\'dan (heyja77/yd-telegram-haber) gelir ve Eklentiler sayfasında normal güncelleme olarak görünür.</p><p>';

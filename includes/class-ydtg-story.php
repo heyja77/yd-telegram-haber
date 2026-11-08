@@ -207,7 +207,12 @@ class YDTG_Story {
 	public static function story_summary( $explicit, $spot ) {
 		$explicit = trim( preg_replace( '/\s+/u', ' ', (string) $explicit ) );
 		if ( '' !== $explicit ) {
-			return self::fit_summary( $explicit ) ? $explicit : '';
+			if ( self::fit_summary( $explicit ) ) {
+				return $explicit;
+			}
+			// Uzunsa yalnızca ilk cümlesi denenir (sözcük eklenmez, değiştirilmez).
+			$first = preg_split( '/(?<=[^0-9][.!?…])\s+(?=[A-ZÇĞİÖŞÜ"“])/u', $explicit );
+			return ( count( $first ) > 1 && self::fit_summary( $first[0] ) ) ? $first[0] : '';
 		}
 		$spot = trim( preg_replace( '/\s+/u', ' ', (string) $spot ) );
 		if ( '' === $spot ) {

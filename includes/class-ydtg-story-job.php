@@ -25,7 +25,18 @@ class YDTG_Story_Job {
 		if ( 'telegram' !== get_post_meta( $post->ID, '_ydtg_source', true ) ) {
 			return;
 		}
-		self::queue( $post->ID );
+		// Yedek: arka plan görevi (bu istekte gönderilemezse).
+		self::queue( $post->ID, false, 60 );
+		// Asıl: yayın isteği bitmeden hemen üret ve gönder (WordPress zamanlayıcısını beklemeden).
+		$pid = (int) $post->ID;
+		add_action(
+			'shutdown',
+			function () use ( $pid ) {
+				YDTG_Story_Job::run( $pid, 0 );
+			},
+			50
+		);
+		YDTG_Plugin::log( 'Story sıraya alındı (#' . $pid . ')' );
 	}
 
 	public static function queue( $pid, $force = false, $delay = 5 ) {
@@ -109,6 +120,7 @@ class YDTG_Story_Job {
 	}
 
 	public static function run( $pid, $force = 0 ) {
+		@set_time_limit( 90 );
 		$pid = (int) $pid;
 		$p   = get_post( $pid );
 		if ( ! $p || 'publish' !== $p->post_status ) {
@@ -121,6 +133,8 @@ class YDTG_Story_Job {
 		$lock = 'ydtg_story_lock_' . $pid;
 		if ( ! add_option( $lock, time(), '', false ) ) {
 			if ( time() - (int) get_option( $lock ) < 300 ) {
+				// Başka bir işlem şu an üretiyor; tamamlanamazsa diye 6 dk sonra tekrar bak.
+				wp_schedule_single_event( time() + 360, self::HOOK, array( $pid, 0 ) );
 				return;
 			}
 			update_option( $lock, time(), false );
@@ -153,9 +167,12 @@ class YDTG_Story_Job {
 			update_post_meta( $pid, '_ydtg_story_sent', 'hata' );
 			YDTG_Plugin::log( 'Story üretilmedi: ' . $title . ' – ' . implode( ' ', $err ), 'warn' );
 			$tips = array();
+			$own = trim( (string) get_post_meta( $pid, '_ydtg_story', true ) );
 			foreach ( $err as $e ) {
 				if ( false !== strpos( $e, 'özeti' ) ) {
-					$tips[] = 'Önizleme mesajına yanıt olarak <code>STORY ÖZETİ: …</code> yaz (en çok 2 satır, 10–18 kelime).';
+					$tips[] = '' === $own
+						? 'Mesajda <b>STORY ÖZETİ</b> satırı bulunamadı; haberin spotu da iki satırdan uzun. Önizleme mesajına yanıt olarak <code>STORY ÖZETİ: …</code> yaz (10–18 kelime).'
+						: 'Mesajdaki Story metni iki satıra sığmadı (' . mb_strlen( $own, 'UTF-8' ) . ' karakter): <i>' . esc_html( $own ) . '</i>' . "\n" . 'Daha kısa bir hâlini <code>STORY ÖZETİ: …</code> olarak yanıtla (10–18 kelime).';
 				} elseif ( false !== strpos( $e, 'Başlık' ) ) {
 					$tips[] = 'Önizleme mesajına yanıt olarak <code>STORY BAŞLIĞI: …</code> yaz (kısa hali).';
 				} elseif ( false !== strpos( $e, 'fotoğraf' ) ) {
