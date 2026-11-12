@@ -17,11 +17,10 @@ class YDTG_Story {
 	const MARGIN = 72;          // sol/sağ kenar boşluğu
 	const TEXT_W = 936;         // 1080 - 2×72
 
-	// Logo
-	const LOGO_TEXT  = 'yalova dijital.';
-	const LOGO_SIZE  = 40;
-	const LOGO_TRACK = -1;
-	const LOGO_TOP   = 252;     // mürekkep üst sınırı
+	// Logo: assets/story-logo.png (beyaz, saydam zemin), sol üstte sabit.
+	const LOGO_FILE = 'assets/story-logo.png';
+	const LOGO_H    = 84;       // logo yüksekliği (genişlik orana göre)
+	const LOGO_TOP  = 236;      // logonun üst kenarı; alt kenar 320 (fotoğraf alanı 330'da başlar)
 
 	// Kategori kutusu
 	const CAT_X = 72, CAT_Y = 1010, CAT_H = 45, CAT_PAD = 18;
@@ -409,10 +408,15 @@ class YDTG_Story {
 
 		$white = imagecolorallocate( $im, 255, 255, 255 );
 
-		// Logo.
-		$lf = self::font( 800 );
-		$lm = self::measure( self::LOGO_TEXT, $lf, self::LOGO_SIZE, self::LOGO_TRACK );
-		self::draw( $im, self::LOGO_TEXT, $lf, self::LOGO_SIZE, self::LOGO_TRACK, self::MARGIN, self::LOGO_TOP - $lm[1], $white );
+		// Logo (her haberde aynı yer ve boyut).
+		$dir  = defined( 'YDTG_DIR' ) ? YDTG_DIR : dirname( __DIR__ ) . '/';
+		$logo = @imagecreatefrompng( $dir . self::LOGO_FILE );
+		if ( ! $logo ) {
+			return array( false, array( 'Story logo dosyası açılamadı.' ), $info );
+		}
+		$lh = self::LOGO_H; $lw = (int) round( imagesx( $logo ) * $lh / imagesy( $logo ) );
+		imagealphablending( $im, true );
+		imagecopyresampled( $im, $logo, self::MARGIN, self::LOGO_TOP, 0, 0, $lw, $lh, imagesx( $logo ), imagesy( $logo ) );
 
 		// Kategori kutusu.
 		$cf = self::font( 600 );
